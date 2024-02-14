@@ -266,3 +266,6 @@ std::string readHTMLFile(const std::string& filename) {  // HTML 파일 읽기 �
 이후 어찌저찌 고쳐보아 아예없는 파일을 요청하면 404not found를 보여주지만, page1을 요청하면 '잘못된 응답'이 나타났다.
 
 이유가 무엇일까
+
+404랑 다른 경우인것을보면  if (htmlFiles.find(url) != htmlFiles.end())는 만족하는 듯하다.
+
