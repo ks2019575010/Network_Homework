@@ -268,4 +268,4 @@ std::string readHTMLFile(const std::string& filename) {  // HTML 파일 읽기 �
 이유가 무엇일까
 
 404랑 다른 경우인것을보면  if (htmlFiles.find(url) != htmlFiles.end())는 만족하는 듯하다.
-
+다른경우도 전부 만족하는데 창에만 안뜨는
