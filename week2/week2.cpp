@@ -99,17 +99,21 @@ int main() {  // 메인 함수 시작
         iss >> method >> url >> http_version;
 
         // 요청된 URL에 해당하는 HTML 파일 전송
-        if (htmlFiles.find(url) != htmlFiles.end()) {//매핑한 곳에서 찾았다면, !=가 왜 찾은것을 의미하나 => find가 아무것도 못찾았을때 end를 반환하기 때문에
-            cout << url << endl;//url확인용 정상
-            std::string filename = htmlFiles[url];
-            cout << htmlFiles[url] << endl;//확인용 정상
-            std::string response = readHTMLFile(filename);
-            cout << response << endl;//확인용 정상, 근데 왜 화면엔 안나오지
-            send(clisock, response.c_str(), response.size(), 0);
-        } else {//404 not found
-            std::string response = "HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\n\r\n<html><body><h1>404 Not Found</h1></body></html>";
-            send(clisock, response.c_str(), response.size(), 0);
-        }
+        if (htmlFiles.find(url) != htmlFiles.end()) {
+    std::string filename = htmlFiles[url];
+    std::string response = readHTMLFile(filename);
+    if (response.empty()) {
+        response = "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/plain\r\n\r\nFailed to read HTML file";
+    }
+    else {
+        std::string httpResponse = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: " + std::to_string(response.size()) + "\r\n\r\n" + response;
+        send(clisock, httpResponse.c_str(), httpResponse.size(), 0);
+    }
+} 
+else {
+    std::string response = "HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\n\r\n<html><body><h1>404 Not Found</h1></body></html>";
+    send(clisock, response.c_str(), response.size(), 0);
+}
     }
 
     closesocket(servsock);  // 서버 소켓 닫기
@@ -117,13 +121,14 @@ int main() {  // 메인 함수 시작
     return 0;  // 프로그램 종료
 }
 
-std::string readHTMLFile(const std::string& filename) {  // HTML 파일 읽기 함수 정의
-    std::ifstream file(filename);  // 파일 열기
-    if (!file.is_open()) {  // 파일 열기 실패 시
-        std::cerr << "Failed to open file: " << filename << std::endl;  // 오류 메시지 출력
-        return "Failed to open file: " + filename;  // 오류 반환
+std::string readHTMLFile(const std::string& filename) {  
+    std::ifstream file(filename);  
+    if (!file.is_open()) {  
+        std::cerr << "Failed to open file: " << filename << std::endl;  
+        return ""; // 파일을 열지 못했으므로 빈 문자열 반환
     }
 
-    std::string content((std::istreambuf_iterator<char>(file)), (std::istreambuf_iterator<char>()));  // 파일 내용 읽기
-    return content;  // 파일 내용 반환
+    std::stringstream buffer; // 파일 내용을 읽을 버퍼 생성
+    buffer << file.rdbuf(); // 파일 내용을 버퍼에 읽어옴
+    return buffer.str(); // 버퍼의 내용을 문자열로 반환
 }
