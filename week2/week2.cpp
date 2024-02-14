@@ -1,8 +1,6 @@
-#include "lib.h"   
-
-#include <fstream>  // 파일 입출력을 위한 헤더 파일
+#include "lib.h" 
+#include <fstream>  
 #include <sstream>  // 문자열 스트림을 위한 헤더 파일
-
 
 std::string readHTMLFile(const std::string& filename);  // HTML 파일을 읽어오는 함수 선언
 
@@ -30,7 +28,7 @@ int main() {  // 메인 함수 시작
     servaddr.sin_port = htons(12345);  // 포트 설정
 
     if (bind(servsock, (SOCKADDR*)&servaddr, sizeof(servaddr)) == SOCKET_ERROR) {  // 소켓에 주소 할당
-        cout << "bind() error" << endl;  // 오류 메시지 출력
+        cout << "bind() error" << endl;  // 오류 메시지 출력, 같은 포트일 경우 나타남
         return 0;  // 프로그램 종료
     }
 
@@ -47,51 +45,52 @@ int main() {  // 메인 함수 시작
         {"/page5.html", "page5.html"}
     };
 
-    while (true) {  // 무한 루프 시작
-        SOCKADDR_IN cliaddr;  // 클라이언트 주소 구조체 선언
-        int addrlen = sizeof(cliaddr);  // 주소 구조체 크기 설정
-        SOCKET clisock = accept(servsock, (SOCKADDR*)&cliaddr, &addrlen);  // 연결 수락
-        if (clisock == INVALID_SOCKET) {  // 연결 수락 실패 시
-            if (WSAGetLastError() == WSAEWOULDBLOCK) {  // 연결이 비동기로 이루어지는 경우
-                continue;  // 루프 계속
+    while (true) {
+        SOCKADDR_IN cliaddr; // 클라이언트 주소 구조체 선언
+        int addrlen = sizeof(cliaddr); // 클라이언트 주소 구조체의 크기 설정
+        SOCKET clisock = accept(servsock, (SOCKADDR*)&cliaddr, &addrlen); // 클라이언트의 연결을 받아들임
+        if (clisock == INVALID_SOCKET) { // 클라이언트 연결에 문제가 있는 경우
+            if (WSAGetLastError() == WSAEWOULDBLOCK) { // 논블로킹 소켓이므로 연결 대기중이면 다시 시도
+                continue;
             }
-            else {  // 그 외의 경우
-                cout << "accept() error" << endl;  // 오류 메시지 출력
-                return 0;  // 프로그램 종료
+            else { // 그 외의 오류인 경우
+                cout << "accept() error" << endl; // 오류 메시지 출력
+                return 0; // 프로그램 종료
             }
         }
 
-        cout << "Client Connected" << endl;  // 클라이언트 연결 성공 메시지 출력
+        cout << "Client Connected" << endl; // 클라이언트가 연결되었다는 메시지 출력
 
-        char request[1024];  // 요청 메시지를 저장하기 위한 버퍼
-        recv(clisock, request, sizeof(request), 0);  // 요청 메시지 수신
-        std::string requestStr(request);  // 요청 메시지를 문자열로 변환
+        std::string request;
+        char buf[1024] = ""; // 버퍼 초기화
 
-        // 요청 문자열에서 URL 추출
-        std::istringstream iss(requestStr);  // 문자열 스트림 생성
-        std::string method, url, protocol;  // 요청 메서드, URL, 프로토콜을 저장할 변수
-        iss >> method >> url >> protocol;  // 공백으로 구분된 요청 메시지를 분석하여 변수에 저장
-
-        std::string htmlContent;  // HTML 내용을 저장할 변수
-
-        if (htmlFiles.find(url) != htmlFiles.end()) {  // 요청된 URL이 존재하는 경우
-            htmlContent = readHTMLFile(htmlFiles[url]);  // HTML 파일 읽기
-        } else {  // 요청된 URL이 존재하지 않는 경우
-            htmlContent = "404 Not Found";  // 404 오류 메시지 설정
+       // 클라이언트로부터 요청 읽기
+        while (true) {
+            int bytesReceived = recv(clisock, buf, sizeof(buf), 0);
+            if (bytesReceived <= 0) {
+                break;
+            }
+            request += std::string(buf, buf + bytesReceived);
+            // 빈 줄을 만나면 요청 읽기 종료
+            if (request.find("\r\n\r\n") != std::string::npos) {
+                break;
+            }
         }
 
-        int sendlen = send(clisock, htmlContent.c_str(), htmlContent.size(), 0);  // 클라이언트에게 HTML 전송
-        if (sendlen == SOCKET_ERROR) {  // 전송 실패 시
-            cout << "send() error" << endl;  // 오류 메시지 출력
-        }
-        else {  // 전송 성공 시
-            cout << "HTML Sent to Client" << endl;  // 전송 완료 메시지 출력
-        }
+        // 요청 파싱
+        std::istringstream iss(request);
+        std::string method, url, http_version;
+        iss >> method >> url >> http_version;
 
-        closesocket(clisock);  // 클라이언트 소켓 닫기
-        cout << "Client Disconnected" << endl;  // 클라이언트 연결 해제 메시지 출력
-
-        break;  // 루프 종료
+        // 요청된 URL에 해당하는 HTML 파일 전송
+        if (htmlFiles.find(url) != htmlFiles.end()) {
+            std::string filename = htmlFiles[url];
+            std::string response = readHTMLFile(filename);
+            send(clisock, response.c_str(), response.size(), 0);
+        } else {
+            std::string response = "HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\n\r\n<html><body><h1>404 Not Found</h1></body></html>";
+            send(clisock, response.c_str(), response.size(), 0);
+        }
     }
 
     closesocket(servsock);  // 서버 소켓 닫기
