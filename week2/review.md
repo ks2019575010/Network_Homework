@@ -1,4 +1,4 @@
-일단 확인한것
+자체리뷰
 
 <pre><code>
 #include "lib.h"   
