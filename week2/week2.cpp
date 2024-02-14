@@ -63,31 +63,50 @@ int main() {  // 메인 함수 시작
 
         std::string request;
         char buf[1024] = ""; // 버퍼 초기화
+        int recvlen; // 수신한 데이터의 길이를 저장하는 변수입니다.
 
        // 클라이언트로부터 요청 읽기
-        while (true) {
-            int bytesReceived = recv(clisock, buf, sizeof(buf), 0);
-            if (bytesReceived <= 0) {
-                break;
+        while (true) { // 데이터를 수신하는 루프입니다.
+                recvlen = recv(clisock, buf, sizeof(buf), 0); // 클라이언트로부터 데이터를 수신합니다.
+                if (recvlen == SOCKET_ERROR) { // 데이터 수신에 실패한 경우
+                    // 논블로킹 소켓은 recv()에서 한번 더 체크해줘야함
+                    if (WSAGetLastError() == WSAEWOULDBLOCK) { // 더 이상 수신할 데이터가 없는 경우
+                        continue; // 다음 루프로 넘어갑니다.
+                    }
+                    else {
+                        cout << "recv() error" << endl; // 오류 메시지를 출력합니다.
+                        return 0; // 프로그램을 종료합니다.
+                    }
+                }
+                else { // 데이터를 성공적으로 수신한 경우
+                    break; // 루프를 탈출합니다.
+                }
             }
-            request += std::string(buf, buf + bytesReceived);
-            // 빈 줄을 만나면 요청 읽기 종료
-            if (request.find("\r\n\r\n") != std::string::npos) {
-                break;
+
+            if (recvlen == 0) { // 클라이언트가 접속을 끊은 경우
+                closesocket(clisock); // 클라이언트 소켓을 닫습니다.
+                cout << "Client Disconnected" << endl; // 클라이언트가 연결을 끊었다는 메시지를 출력합니다.
+                break; // 루프를 탈출하여 다음 클라이언트의 접속을 대기합니다.
             }
-        }
+
+            buf[recvlen] = '\0'; // 수신한 데이터를 문자열로 만듭니다.
+            request = std::string(buf);
+            //cout << "Recv: " << buf << endl; // 수신한 데이터를 출력합니다.
 
         // 요청 파싱
-        std::istringstream iss(request);
+        std::istringstream iss(request);// request를 공백을 기준으로 분리하여 각각의 공간에 넣는다.
         std::string method, url, http_version;
         iss >> method >> url >> http_version;
 
         // 요청된 URL에 해당하는 HTML 파일 전송
-        if (htmlFiles.find(url) != htmlFiles.end()) {
+        if (htmlFiles.find(url) != htmlFiles.end()) {//매핑한 곳에서 찾았다면, !=가 왜 찾은것을 의미하나 => find가 아무것도 못찾았을때 end를 반환하기 때문에
+            cout << url << endl;//url확인용 정상
             std::string filename = htmlFiles[url];
+            cout << htmlFiles[url] << endl;//확인용 정상
             std::string response = readHTMLFile(filename);
+            cout << response << endl;//확인용 정상, 근데 왜 화면엔 안나오지
             send(clisock, response.c_str(), response.size(), 0);
-        } else {
+        } else {//404 not found
             std::string response = "HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\n\r\n<html><body><h1>404 Not Found</h1></body></html>";
             send(clisock, response.c_str(), response.size(), 0);
         }
