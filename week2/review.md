@@ -268,4 +268,8 @@ std::string readHTMLFile(const std::string& filename) {  // HTML 파일 읽기 �
 이유가 무엇일까
 
 404랑 다른 경우인것을보면  if (htmlFiles.find(url) != htmlFiles.end())는 만족하는 듯하다.
-다른경우도 전부 만족하는데 창에만 안뜨는
+다른경우도 전부 만족하는데 창에만 안뜨는걸까
+
+결국 마지막 문제는 html파일이 서버 터미널에선 출력되는데 웹서버에선 출력이 안되는게 문제였다.
+"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: " + std::to_string(response.size()) + "\r\n\r\n" + response; 를 써서 해결했다.
+다른 해결방법이 있는지는 따로 모르겠다.
