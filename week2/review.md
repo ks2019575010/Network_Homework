@@ -1,5 +1,7 @@
 자체리뷰
 
+로직이 비동기적이라 요청이 끊겼다가 들어가는 버그
+
 <pre><code>
 #include "lib.h"   
 #include <fstream>  
