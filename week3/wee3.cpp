@@ -10,21 +10,19 @@ struct Session {
     WSAOVERLAPPED readOverLapped = {}; // 비동기 읽기를 위한 오버랩 구조체
     WSAOVERLAPPED writeOverLapped = {}; // 비동기 쓰기를 위한 오버랩 구조체
 
-    // 생성자
-    Session() {}
-    Session(SOCKET sock) : sock(sock) {}
 };
 
-//vector<Session*> sessions;//여기서 전역변수 선언해야하나?
+// 세션 객체를 담을 벡터 생성 (전역 벡터로 선언)
+vector<Session*> sessions;
 
-// 스레드 풀 종료 여부를 나타내는 원자적 변수
+// 쓰레드 풀 종료 여부를 나타내는 원자적 변수
 atomic<bool> TPoolRunning = true;
-
-// 메모리 풀 객체 선언 및 초기화
-MemoryPool* MemPool = new MemoryPool(sizeof(Session), 1000);
 
 // WorkerThread 함수의 프로토타입 선언
 void WorkerThread(HANDLE iocpHd);
+
+// 메모리 풀 객체 선언 및 초기화
+MemoryPool* MemPool = new MemoryPool(sizeof(Session), 1000);
 
 int main() {
     // Winsock 초기화
@@ -54,6 +52,7 @@ int main() {
     servaddr.sin_family = AF_INET;
     servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
     servaddr.sin_port = htons(12345);
+
     if (bind(servsock, (SOCKADDR*)&servaddr, sizeof(servaddr)) == SOCKET_ERROR) {
         cout << "bind() error" << endl;
         return 1;
@@ -69,8 +68,8 @@ int main() {
     HANDLE iocp = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0);
 
     // 세션 객체를 담을 벡터 생성
-    vector<Session*> sessions;//여기서 선언 sessions
-    sessions.reserve(100);
+    //vector<Session*> sessions;//왜 전역변수로 하면 안될까
+    sessions.reserve(100);//전역변수에 동적할당
 
     // WorkerThread를 생성하여 스레드 풀 생성
     for (int i = 0; i < MAX_THREAD; i++) {
@@ -79,6 +78,7 @@ int main() {
             (LPTHREAD_START_ROUTINE)WorkerThread,
             iocp, 0, NULL
         );
+        //쓰레드핸들을 닫음
         CloseHandle(hThread);
     }
 
@@ -96,16 +96,12 @@ int main() {
             }
             continue;
         }
-
-        // 비블록킹 모드로 설정
-        u_long on = 1;
-        if (ioctlsocket(clisock, FIONBIO, &on) == SOCKET_ERROR) {
-            cout << "ioctlsocket() error" << endl;
-            return 1;
-        }
+        //?
 
         // 세션 객체를 메모리 풀에서 할당하여 초기화
         Session* session = MemPool_new<Session>(*MemPool, clisock);
+
+        // 세션을 세션 벡터에 추가
         sessions.push_back(session);
 
         cout << "Client Connected" << endl;
@@ -115,8 +111,8 @@ int main() {
 
         // 비동기 수신 시작
         WSABUF wsabuf_R = {};
-        wsabuf_R.buf = session->buf;
-        wsabuf_R.len = DEFAULT_BUFLEN;
+        wsabuf_R.buf = session->buf; // 데이터를 저장할 버퍼 설정
+        wsabuf_R.len = DEFAULT_BUFLEN; // 버퍼의 크기 설정
         DWORD flags = 0;
         WSARecv(
             clisock, &wsabuf_R, 1,
@@ -146,31 +142,39 @@ void WorkerThread(HANDLE iocpHd) {
     Session* session;
     LPOVERLAPPED lpOverlapped;
     WSABUF wsabuf_S = {}, wsabuf_R = {};
-    vector<Session*> sessions;//추가해야하나?
-    DWORD flags = 0;
+    //vector<Session*> sessions;//추가해야하나?
+    //DWORD flags = 0;
 
     while (TPoolRunning) {
         // 완료된 IOCP 작업을 가져옴
+        cout << "150" << endl;//확인용
+
         bool ret = GetQueuedCompletionStatus(
             iocpHd, &bytesTransfered,
             (ULONG_PTR*)&session, &lpOverlapped, INFINITE
         );
-        if (!ret || bytesTransfered == 0) {
-            cout << "Client Disconnected" << endl;
+        if (!ret || bytesTransfered == 0)  {
+            cout << "Client Disconnected" << endl;//정상출력
             closesocket(session->sock);
             MemPool_delete(*MemPool, session);
+            //sessions.erase(std::remove(sessions.begin(), sessions.end(), session), sessions.end());
             continue;
         }
-
+         cout << "163" << endl;
         // 완료된 작업에 따라 처리
-        if (lpOverlapped == &session->readOverLapped) {
+        if (lpOverlapped == &session->readOverLapped) {//이 조건문은 현재 완료된 IO 작업이 해당 세션의 읽기 작업인지를 판별하여 그에 따른 처리를 수행
             // 읽기 완료 후 데이터를 쓰는 작업 시작
-            wsabuf_S.buf = session->buf;
-            wsabuf_S.len = bytesTransfered;
+            
+            //cout.write(session->buf, bytesTransfered);//출력되지 않음, 읽기가 완료되질 않았거나 buf에 값이 안들어옴
+            //cout << endl;
+            cout << "170" << endl;//읽기하는지 확인용, 출력안됨, 읽기작업조차 일어나지 않음
+
+            wsabuf_S.buf = session->buf;//wsabuf_S = 클라이언트가 보낸 데이터가 저장된 버퍼
+            wsabuf_S.len = bytesTransfered;//
 
             // 클라이언트가 보낸 메시지를 다른 클라이언트에게 브로드캐스트
-            for (auto otherSession : sessions) {
-                if (otherSession != session) {
+            for (auto otherSession : sessions) {//전체 클라이언트 수의 자신을 제외한 모든 클라이언트?
+                if (otherSession != session) {//othersession이 자신이 아니라면
                     WSASend(
                         otherSession->sock, &wsabuf_S, 1,
                         NULL, 0, &otherSession->writeOverLapped, NULL
@@ -181,10 +185,11 @@ void WorkerThread(HANDLE iocpHd) {
             // 다시 클라이언트로부터 메시지를 받을 수 있도록 수신 작업 시작
             WSARecv(
                 session->sock, &wsabuf_R, 1,
-                NULL, &flags, &session->readOverLapped, NULL
+                NULL, 0, &session->readOverLapped, NULL
             );
         }
         else if (lpOverlapped == &session->writeOverLapped) {
+             cout << "192" << endl;
             // 쓰기 완료 후 다시 읽는 작업 시작
             wsabuf_R.buf = session->buf;
             wsabuf_R.len = DEFAULT_BUFLEN;
