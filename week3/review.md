@@ -890,3 +890,6 @@ void WorkerThread(HANDLE iocpHd) {
 
 이제 //Exception has occurred. Segmentation fault오류
 WSARecv( 이곳에서 나는 오류만 잡으면 성공
+
+클라이언트에서
+cin >> ip를 사용하면 개행 문자가 입력 버퍼에 남아있게 됩니다. 그 후 std::getline(std::cin, message);를 사용하면 남아있는 개행 문자가 getline()에 의해 즉시 소비되어 아무런 입력을 받지 못하게 됩니다.
