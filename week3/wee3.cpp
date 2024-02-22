@@ -10,6 +10,7 @@ struct Session {
     WSAOVERLAPPED readOverLapped = {}; // 비동기 읽기를 위한 오버랩 구조체
     WSAOVERLAPPED writeOverLapped = {}; // 비동기 쓰기를 위한 오버랩 구조체
 
+    Session(SOCKET sock) : sock(sock){}//session의 생성자 명시
 };
 
 // 세션 객체를 담을 벡터 생성 (전역 벡터로 선언)
@@ -143,11 +144,11 @@ void WorkerThread(HANDLE iocpHd) {
     LPOVERLAPPED lpOverlapped;
     WSABUF wsabuf_S = {}, wsabuf_R = {};
     //vector<Session*> sessions;//추가해야하나?
-    //DWORD flags = 0;
+    DWORD flags = 0;
 
     while (TPoolRunning) {
         // 완료된 IOCP 작업을 가져옴
-        cout << "150" << endl;//확인용
+        //cout << "iocp 가져옴" << endl;//확인용
 
         bool ret = GetQueuedCompletionStatus(
             iocpHd, &bytesTransfered,
@@ -160,14 +161,14 @@ void WorkerThread(HANDLE iocpHd) {
             //sessions.erase(std::remove(sessions.begin(), sessions.end(), session), sessions.end());
             continue;
         }
-         cout << "163" << endl;
+        //cout << "163" << endl;
         // 완료된 작업에 따라 처리
         if (lpOverlapped == &session->readOverLapped) {//이 조건문은 현재 완료된 IO 작업이 해당 세션의 읽기 작업인지를 판별하여 그에 따른 처리를 수행
             // 읽기 완료 후 데이터를 쓰는 작업 시작
             
             //cout.write(session->buf, bytesTransfered);//출력되지 않음, 읽기가 완료되질 않았거나 buf에 값이 안들어옴
             //cout << endl;
-            cout << "170" << endl;//읽기하는지 확인용, 출력안됨, 읽기작업조차 일어나지 않음
+            //cout << "170" << endl;//읽기하는지 확인용, 출력안됨, 읽기작업조차 일어나지 않음
 
             wsabuf_S.buf = session->buf;//wsabuf_S = 클라이언트가 보낸 데이터가 저장된 버퍼
             wsabuf_S.len = bytesTransfered;//
@@ -183,17 +184,23 @@ void WorkerThread(HANDLE iocpHd) {
             }
 
             // 다시 클라이언트로부터 메시지를 받을 수 있도록 수신 작업 시작
-            WSARecv(
+            //Exception has occurred. Segmentation fault오류
+            //원인
+            //1. null 값을 가리키는 포인터에 접근할 경우
+            //2. 할당 받은 메모리 공간을 넘은 곳을 건드린 경우
+            //3. 더 이상 존재하지 않는 메모리 영역을 가리킬 경우
+            //4. read-only 표시 메모리 영역에 쓰려고 할 경우
+            WSARecv(//3번이 아니라면 밑에있는것도 아니어야...flag문제인가?
                 session->sock, &wsabuf_R, 1,
-                NULL, 0, &session->readOverLapped, NULL
+                NULL, &flags, &session->readOverLapped, NULL
             );
         }
         else if (lpOverlapped == &session->writeOverLapped) {
-             cout << "192" << endl;
+            //cout << "192" << endl;
             // 쓰기 완료 후 다시 읽는 작업 시작
             wsabuf_R.buf = session->buf;
             wsabuf_R.len = DEFAULT_BUFLEN;
-            DWORD flags = 0;
+            //DWORD flags = 0;
             WSARecv(
                 session->sock, &wsabuf_R, 1,
                 NULL, &flags, &session->readOverLapped, NULL
