@@ -9,6 +9,7 @@ int main() {
     char ip[16] = "";
     cout << "Input server IP: "; 
     cin >> ip;
+     
 
     // 서버 주소 설정
     sockaddr_in serverAddr;
@@ -16,6 +17,8 @@ int main() {
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_addr.s_addr = inet_addr(ip); // 서버의 IP 주소
     serverAddr.sin_port = htons(12345); // 서버의 포트 번호
+
+    cin.getline(ip, sizeof(ip));//이후 개행문자제거
 
     // 소켓 생성
     SOCKET clientSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
